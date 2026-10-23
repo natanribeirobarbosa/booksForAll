@@ -8,7 +8,7 @@ export default function BookCard({ livro, onAbrir }) {
         }}>
 
 
-            <div className="book-card-info" style={{ transform: livro.nome.length < 55 ? 'rotate(90deg)' : 'none', }}>
+            <div onClick={() => onAbrir()} className="book-card-info" style={{ transform: livro.nome.length < 55 ? 'rotate(90deg)' : 'none', }}>
                 <span
                     title={livro.nome}
                     style={{
