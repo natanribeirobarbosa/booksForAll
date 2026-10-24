@@ -206,33 +206,14 @@ export default function Reader({ livro, onVoltar }) {
             </div>
 
             {paginasCarregadas.map((pagina) => {
+
               const blocos = pagina.blocos || [];
-              const grupos = [];
-              let textoNormal = [];
 
-              function salvarParagrafo() {
-                if (textoNormal.length > 0) {
-                  grupos.push({
-                    tipo: 'paragrafo',
-                    texto: textoNormal.join(' ').replace(/\s+/g, ' ').trim(),
-                  });
-                  textoNormal = [];
-                }
-              }
+              const grupos = blocos.map((bloco) => ({
+                tipo: bloco.titulo ? 'titulo' : 'paragrafo',
+                texto: bloco.texto,
+              }));
 
-              for (const bloco of blocos) {
-                if (bloco.titulo) {
-                  salvarParagrafo();
-                  grupos.push({
-                    tipo: 'titulo',
-                    texto: bloco.texto,
-                  });
-                } else {
-                  textoNormal.push(bloco.texto);
-                }
-              }
-
-              salvarParagrafo();
 
               return (
                 <div className="reader-page" key={pagina.numero}>
@@ -253,7 +234,12 @@ export default function Reader({ livro, onVoltar }) {
                           fontSize: `${18 * escalaFonte}px`,
                         }}
                       >
-                        {grupo.texto}
+                        {grupo.texto.split(/<br\s*\/?>/i).map((parte, indice) => (
+                          <span key={`${pagina.numero}-${indice}`}>
+                            {indice > 0 && <br />}
+                            {parte}
+                          </span>
+                        ))}
                       </p>
                     ))
                   )}

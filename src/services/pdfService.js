@@ -68,21 +68,18 @@ function extrairBlocosDoTexto(conteudo) {
       const [, , , escalaY, x, y] = item.transform;
 
       return {
-        texto: item.str,
+        texto: item.str.trim(),
         x,
         y,
+        largura: item.width || 0,
         tamanho: Math.abs(escalaY) || 18,
       };
     })
     .sort((a, b) => {
-      // Ordena de cima para baixo e, na mesma linha, da esquerda para a direita.
       const diferencaY = b.y - a.y;
-
-      if (Math.abs(diferencaY) > 3) {
-        return diferencaY;
-      }
-
-      return a.x - b.x;
+      return Math.abs(diferencaY) > 3
+        ? diferencaY
+        : a.x - b.x;
     });
 
   const linhas = [];
@@ -96,6 +93,7 @@ function extrairBlocosDoTexto(conteudo) {
       linha = {
         y: item.y,
         xInicial: item.x,
+        xFinal: item.x + item.largura,
         tamanho: item.tamanho,
         itens: [],
       };
@@ -105,10 +103,18 @@ function extrairBlocosDoTexto(conteudo) {
 
     linha.itens.push(item);
     linha.xInicial = Math.min(linha.xInicial, item.x);
+    linha.xFinal = Math.max(
+      linha.xFinal,
+      item.x + item.largura
+    );
     linha.tamanho = Math.max(linha.tamanho, item.tamanho);
   }
 
   linhas.sort((a, b) => b.y - a.y);
+
+  const margemDireita = Math.max(
+    ...linhas.map((linha) => linha.xFinal)
+  );
 
   const linhasFormatadas = linhas.map((linha) => ({
     texto: linha.itens
@@ -118,25 +124,32 @@ function extrairBlocosDoTexto(conteudo) {
       .replace(/\s+/g, ' ')
       .trim(),
     xInicial: linha.xInicial,
+    xFinal: linha.xFinal,
     y: linha.y,
     tamanho: linha.tamanho,
   }));
 
-  // Usa a margem esquerda predominante como referência.
   const frequencias = new Map();
 
   for (const linha of linhasFormatadas) {
     const margem = Math.round(linha.xInicial / 3) * 3;
-    frequencias.set(margem, (frequencias.get(margem) || 0) + 1);
+    frequencias.set(
+      margem,
+      (frequencias.get(margem) || 0) + 1
+    );
   }
 
   const margemPrincipal = [...frequencias.entries()]
     .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
 
-  const tolerancia = Math.max(
-    8,
-    (linhasFormatadas[0]?.tamanho || 18) * 0.8
-  );
+  const tamanhoMedio =
+    linhasFormatadas.reduce(
+      (soma, linha) => soma + linha.tamanho,
+      0
+    ) / Math.max(linhasFormatadas.length, 1);
+
+  const toleranciaIndentacao = Math.max(8, tamanhoMedio * 0.8);
+  const toleranciaEspacamento = tamanhoMedio * 1.5;
 
   const blocos = [];
   let paragrafo = null;
@@ -157,12 +170,33 @@ function extrairBlocosDoTexto(conteudo) {
   for (const linha of linhasFormatadas) {
     if (!linha.texto) continue;
 
-    const indentada = linha.xInicial > margemPrincipal + tolerancia;
+    const espacamento = linhaAnterior
+      ? linhaAnterior.y - linha.y
+      : 0;
 
-    // Uma linha indentada pode indicar o começo de um novo parágrafo.
+    const indentada =
+      linha.xInicial > margemPrincipal + toleranciaIndentacao;
+
+    const espacamentoGrande =
+      linhaAnterior &&
+      espacamento > Math.max(
+        toleranciaEspacamento,
+        linhaAnterior.tamanho * 1.5
+      );
+
+    const linhaEmBranco =
+      linhaAnterior &&
+      espacamento > Math.max(
+        toleranciaEspacamento,
+        linhaAnterior.tamanho * 1.5
+      );
+
+
+
     const comecaParagrafo =
       !paragrafo ||
-      (indentada && linhaAnterior && !linhaAnterior.terminaLinha);
+      Boolean(indentada && linhaAnterior) ||
+      Boolean(espacamentoGrande);
 
     if (comecaParagrafo) {
       salvarParagrafo();
@@ -172,18 +206,37 @@ function extrairBlocosDoTexto(conteudo) {
         tamanho: linha.tamanho,
       };
     } else {
-      paragrafo.texto += ` ${linha.texto}`;
+      // Preserva a quebra quando a linha anterior termina
+      // claramente antes do início da linha seguinte.
+      const fimLinhaAnterior = linhaAnterior.xFinal;
+      const inicioLinhaAtual = linha.xInicial;
+      const distanciaHorizontal =
+        inicioLinhaAtual - fimLinhaAnterior;
+
+      const terminaAntesDaMargem =
+        margemDireita - linhaAnterior.xFinal >
+        linhaAnterior.tamanho * 3;
+
+      const comecaComMaiuscula = /^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]/.test(
+        linha.texto.trim()
+      );
+
+      const quebraLinha =
+        terminaAntesDaMargem && comecaComMaiuscula;
+
+      paragrafo.texto += quebraLinha
+        ? `<br />${linha.texto}`
+        : ` ${linha.texto}`;
     }
 
-    linhaAnterior = {
-      terminaLinha: /[.!?:…]["')\]]?$/.test(linha.texto),
-    };
+    linhaAnterior = linha;
   }
 
   salvarParagrafo();
 
   return blocos;
 }
+
 
 
 export async function carregarPdf(livro, onPaginaCarregada) {
