@@ -1,7 +1,8 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { carregarPdf } from '../services/pdfService';
 import './Reader.css';
+
 
 export default function Reader({ livro, onVoltar }) {
   const [escalaFonte, setEscalaFonte] = useState(1);
@@ -9,6 +10,70 @@ export default function Reader({ livro, onVoltar }) {
   const [totalPaginas, setTotalPaginas] = useState(0);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const distanciaInicial = useRef(null);
+  const ultimaDistancia = useRef(null);
+
+  function distanciaToque(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+
+  function navegarPorToque(event) {
+    // Não troca de página se o usuário estiver selecionando texto.
+    if (window.getSelection()?.toString()) return;
+
+    const area = event.currentTarget;
+    const largura = area.clientWidth;
+    const posicaoX = event.clientX - area.getBoundingClientRect().left;
+
+    // Ignora o toque se ele estiver muito próximo do centro.
+    if (posicaoX > largura * 0.35 && posicaoX < largura * 0.65) {
+      return;
+    }
+
+    area.scrollBy({
+      left: posicaoX >= largura * 0.65 ? largura : -largura,
+      behavior: 'smooth',
+    });
+  }
+
+
+  function iniciarPinça(event) {
+    if (event.touches.length === 2) {
+      const distancia = distanciaToque(event.touches);
+
+      distanciaInicial.current = distancia;
+      ultimaDistancia.current = distancia;
+    }
+  }
+
+  function moverPinça(event) {
+    if (event.touches.length !== 2 || ultimaDistancia.current === null) {
+      return;
+    }
+
+    const distanciaAtual = distanciaToque(event.touches);
+    const diferenca = distanciaAtual - ultimaDistancia.current;
+
+    // Evita alterações excessivas com movimentos pequenos.
+    if (Math.abs(diferenca) >= 12) {
+      setEscalaFonte((atual) => {
+        const novaEscala = atual + (diferenca > 0 ? 0.05 : -0.05);
+        return Math.min(2.5, Math.max(0.7, novaEscala));
+      });
+
+      ultimaDistancia.current = distanciaAtual;
+    }
+  }
+
+  function finalizarPinça() {
+    distanciaInicial.current = null;
+    ultimaDistancia.current = null;
+  }
+
 
   const nomeLivro = (livro?.nome || 'Livro sem título')
     .replace(/\.pdf$/i, '')
@@ -74,7 +139,7 @@ export default function Reader({ livro, onVoltar }) {
         if (!cancelado) {
           setErro(
             e?.message ||
-              'Não foi possível ler este PDF. Tente importá-lo novamente.'
+            'Não foi possível ler este PDF. Tente importá-lo novamente.'
           );
         }
       } finally {
@@ -104,91 +169,101 @@ export default function Reader({ livro, onVoltar }) {
 
         <h1>{nomeLivro}</h1>
 
-        <p>
-          {totalPaginas > 0
-            ? `${paginasCarregadas.length} de ${totalPaginas} páginas`
-            : carregando
-              ? 'Preparando leitura...'
-              : 'Leitura'}
-        </p>
+
       </header>
 
       <div className="reader-controls">
-        <button
-          onClick={() => alterarEscala(-0.1)}
-          disabled={escalaFonte <= 0.7}
-          aria-label="Diminuir tamanho do texto"
-        >
-          A-
-        </button>
 
-        <span>{Math.round(escalaFonte * 100)}%</span>
 
-        <button
-          onClick={() => alterarEscala(0.1)}
-          disabled={escalaFonte >= 2.5}
-          aria-label="Aumentar tamanho do texto"
-        >
-          A+
-        </button>
+
+
       </div>
 
-      {carregando && (
-        <p role="status">
-          Processando o PDF. As páginas aparecerão conforme ficarem prontas.
-        </p>
-      )}
+
 
       {erro && <p role="alert">{erro}</p>}
 
       {!erro && (
         <>
-          <section className="reader-cover-generated">
-            <span className="cover-brand">BOOKS FOR ALL</span>
-            <h2>{nomeLivro}</h2>
-            <span className="cover-footer">LIVRO DIGITAL</span>
-          </section>
 
-          <section className="reader-content">
+
+
+          <section
+            className="reader-content"
+            onTouchStart={iniciarPinça}
+            onTouchMove={moverPinça}
+            onTouchEnd={finalizarPinça}
+            onTouchCancel={finalizarPinça}
+            onClick={navegarPorToque}
+          >
+
+            <div className="reader-page reader-title-page">
+              <div className="reader-cover-generated">
+                <span className="cover-brand">BOOKS FOR ALL</span>
+                <h2>{nomeLivro}</h2>
+
+              </div>
+            </div>
+
             {paginasCarregadas.map((pagina) => {
               const blocos = pagina.blocos || [];
+              const grupos = [];
+              let textoNormal = [];
+
+              function salvarParagrafo() {
+                if (textoNormal.length > 0) {
+                  grupos.push({
+                    tipo: 'paragrafo',
+                    texto: textoNormal.join(' ').replace(/\s+/g, ' ').trim(),
+                  });
+                  textoNormal = [];
+                }
+              }
+
+              for (const bloco of blocos) {
+                if (bloco.titulo) {
+                  salvarParagrafo();
+                  grupos.push({
+                    tipo: 'titulo',
+                    texto: bloco.texto,
+                  });
+                } else {
+                  textoNormal.push(bloco.texto);
+                }
+              }
+
+              salvarParagrafo();
 
               return (
-                <article className="reader-page" key={pagina.numero}>
+                <div className="reader-page" key={pagina.numero}>
+
+
+                  {grupos.length === 0 ? (
+                    <p>Esta página não contém texto extraível.</p>
+                  ) : (
+                    grupos.map((grupo, indice) => (
+                      <p
+                        key={`${pagina.numero}-${indice}`}
+                        className={
+                          grupo.tipo === 'titulo'
+                            ? 'reader-text reader-title'
+                            : 'reader-text'
+                        }
+                        style={{
+                          fontSize: `${18 * escalaFonte}px`,
+                        }}
+                      >
+                        {grupo.texto}
+                      </p>
+                    ))
+                  )}
                   <p className="reader-page-number">
                     Página {pagina.numero}
                   </p>
-
-                  {blocos.length === 0 ? (
-                    <p>
-                      Esta página não contém texto extraível.
-                    </p>
-                  ) : (
-                    blocos.map((bloco, indice) => {
-                      const tamanhoBase = Number(bloco.tamanho) || 16;
-                      const tamanhoFinal = Math.min(
-                        90,
-                        Math.max(11, tamanhoBase * escalaFonte)
-                      );
-
-                      return (
-                        <p
-                          key={`${pagina.numero}-${indice}`}
-                          className={
-                            bloco.titulo
-                              ? 'reader-text reader-title'
-                              : 'reader-text'
-                          }
-                          style={{ fontSize: `${tamanhoFinal}px` }}
-                        >
-                          {bloco.texto}
-                        </p>
-                      );
-                    })
-                  )}
-                </article>
+                </div>
               );
             })}
+
           </section>
         </>
       )}

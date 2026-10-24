@@ -64,50 +64,127 @@ async function extrairComOCR(pagina, worker) {
 function extrairBlocosDoTexto(conteudo) {
   const itens = conteudo.items
     .filter((item) => item.str?.trim())
-    .map((item) => ({
-      texto: item.str,
-      tamanho: Math.max(
-        8,
-        Math.round(Math.hypot(item.transform[2], item.transform[3]))
-      ),
-      x: item.transform[4],
-      y: item.transform[5],
-    }));
+    .map((item) => {
+      const [, , , escalaY, x, y] = item.transform;
+
+      return {
+        texto: item.str,
+        x,
+        y,
+        tamanho: Math.abs(escalaY) || 18,
+      };
+    })
+    .sort((a, b) => {
+      // Ordena de cima para baixo e, na mesma linha, da esquerda para a direita.
+      const diferencaY = b.y - a.y;
+
+      if (Math.abs(diferencaY) > 3) {
+        return diferencaY;
+      }
+
+      return a.x - b.x;
+    });
 
   const linhas = [];
 
   for (const item of itens) {
-    let linha = linhas.find((l) => Math.abs(l.y - item.y) <= 3);
+    let linha = linhas.find(
+      (l) => Math.abs(l.y - item.y) <= 3
+    );
 
     if (!linha) {
-      linha = { y: item.y, itens: [] };
+      linha = {
+        y: item.y,
+        xInicial: item.x,
+        tamanho: item.tamanho,
+        itens: [],
+      };
+
       linhas.push(linha);
     }
 
     linha.itens.push(item);
+    linha.xInicial = Math.min(linha.xInicial, item.x);
+    linha.tamanho = Math.max(linha.tamanho, item.tamanho);
   }
 
   linhas.sort((a, b) => b.y - a.y);
 
-  return linhas.map((linha) => {
-    linha.itens.sort((a, b) => a.x - b.x);
-
-    const texto = linha.itens
+  const linhasFormatadas = linhas.map((linha) => ({
+    texto: linha.itens
+      .sort((a, b) => a.x - b.x)
       .map((item) => item.texto)
       .join(' ')
-      .trim();
+      .replace(/\s+/g, ' ')
+      .trim(),
+    xInicial: linha.xInicial,
+    y: linha.y,
+    tamanho: linha.tamanho,
+  }));
 
-    const tamanhoMedio =
-      linha.itens.reduce((total, item) => total + item.tamanho, 0) /
-      linha.itens.length;
+  // Usa a margem esquerda predominante como referência.
+  const frequencias = new Map();
 
-    return {
-      texto,
-      tamanho: Math.round(tamanhoMedio),
-      titulo: tamanhoMedio >= 18,
+  for (const linha of linhasFormatadas) {
+    const margem = Math.round(linha.xInicial / 3) * 3;
+    frequencias.set(margem, (frequencias.get(margem) || 0) + 1);
+  }
+
+  const margemPrincipal = [...frequencias.entries()]
+    .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+
+  const tolerancia = Math.max(
+    8,
+    (linhasFormatadas[0]?.tamanho || 18) * 0.8
+  );
+
+  const blocos = [];
+  let paragrafo = null;
+  let linhaAnterior = null;
+
+  function salvarParagrafo() {
+    if (paragrafo?.texto.trim()) {
+      blocos.push({
+        texto: paragrafo.texto.trim(),
+        tamanho: paragrafo.tamanho,
+        titulo: false,
+      });
+    }
+
+    paragrafo = null;
+  }
+
+  for (const linha of linhasFormatadas) {
+    if (!linha.texto) continue;
+
+    const indentada = linha.xInicial > margemPrincipal + tolerancia;
+
+    // Uma linha indentada pode indicar o começo de um novo parágrafo.
+    const comecaParagrafo =
+      !paragrafo ||
+      (indentada && linhaAnterior && !linhaAnterior.terminaLinha);
+
+    if (comecaParagrafo) {
+      salvarParagrafo();
+
+      paragrafo = {
+        texto: linha.texto,
+        tamanho: linha.tamanho,
+      };
+    } else {
+      paragrafo.texto += ` ${linha.texto}`;
+    }
+
+    linhaAnterior = {
+      terminaLinha: /[.!?:…]["')\]]?$/.test(linha.texto),
     };
-  });
+  }
+
+  salvarParagrafo();
+
+  return blocos;
 }
+
 
 export async function carregarPdf(livro, onPaginaCarregada) {
   if (!livro?.id) {
