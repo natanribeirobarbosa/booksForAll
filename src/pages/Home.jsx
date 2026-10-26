@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
 import BookCard from '../components/BookCard';
 import {
-  salvarLivro,
   listarLivros,
-} from '../services/bookStorage';
+} from '../services/functionsBookStorage/searchBooks.js';
+
+import { salvarLivro } from '../services/functionsBookStorage/saveBook.js';
 
 function converterParaBlob(data) {
   if (data instanceof Blob) {
