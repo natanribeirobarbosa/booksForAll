@@ -198,3 +198,8 @@ p {
     padding: 6px;
   }
 }
+
+.reader-text.continuacao {
+    margin-top: 0;
+    text-indent: 0;
+}

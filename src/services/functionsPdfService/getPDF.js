@@ -3,7 +3,7 @@ import { obterArquivoPdf } from '../functionsBookStorage/getPdfFile';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { atualizarStatusLivro } from '../functionsBookStorage/searchBooks';
 import { listarPaginas } from '../functionsBookStorage/searchPages';
-import { juntarParagrafosEntrePaginas} from './concatenate'
+import { juntarParagrafosEntrePaginas } from './concatenate'
 import { salvarPagina } from '../functionsBookStorage/searchPages';
 import { gerarEGuardarVersoes } from './versions';
 import { bugText } from './bugText';
@@ -122,13 +122,18 @@ function extrairBlocosDoTexto(conteudo) {
     const espacamentoGrande =
       Boolean(linhaAnterior) &&
       espacamento >
-        Math.max(
-          toleranciaEspacamento,
-          linhaAnterior.tamanho * 1.5
-        );
+      Math.max(
+        toleranciaEspacamento,
+        linhaAnterior.tamanho * 1.5
+      );
+
+    const comecaComMinuscula = /^[a-záàâãéèêíìîóòôõúùûüç]/.test(
+      textoLinha.trim()
+    );
 
     const inicioPossivel =
       comecaComMaiuscula(textoLinha) &&
+      !comecaComMinuscula &&
       (indentada || espacamentoGrande);
 
     if (!paragrafo || (linhaAnterior && inicioPossivel)) {

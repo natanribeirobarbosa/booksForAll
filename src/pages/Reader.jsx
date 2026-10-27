@@ -418,11 +418,18 @@ export default function Reader({ livro, onVoltar }) {
               paginasVisuais.map((pagina, indice) => (
                 <article className="reader-page" key={`pagina-${indice}`}>
                   <div className="reader-page-text">
+
                     {pagina.map((bloco, blocoIndice) => (
-                      <p className="reader-text" style={{ fontSize: `${tamanhoFonte}px` }}>
+                      <p
+                        key={blocoIndice}
+                        className={`reader-text ${bloco.continuacao ? 'continuacao' : ''}`}
+                        data-continuacao={String(Boolean(bloco.continuacao))}
+                        style={{ fontSize: `${tamanhoFonte}px` }}
+                      >
                         {bloco.texto}
                       </p>
                     ))}
+
                   </div>
 
                   {/*   <span className="reader-page-number">

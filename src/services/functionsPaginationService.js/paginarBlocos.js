@@ -1,3 +1,4 @@
+
 import { estimarCaracteresPorLinha } from "./howMuchChar";
 import { dividirEmLinhas } from "./divideInLines";
 
@@ -5,8 +6,6 @@ const MARGEM_VERTICAL = 40;
 const ALTURA_LINHA = 1.7;
 const ESPACO_PARAGRAFO = 18;
 
-
-// Gera páginas respeitando os blocos e as quebras do PDF original.
 export function paginarBlocos(blocos, largura, altura, tamanhoFonte) {
     const limiteCaracteres = estimarCaracteresPorLinha(
         largura,
@@ -30,11 +29,9 @@ export function paginarBlocos(blocos, largura, altura, tamanhoFonte) {
     }
 
     for (const bloco of blocos || []) {
-        const texto = String(bloco.texto || '').trim();
+        const texto = String(bloco.texto || "").trim();
 
         if (!texto) {
-            // Mesmo um bloco vazio não deve impedir uma quebra solicitada
-            // pelo último bloco da página original.
             if (bloco.quebraApos) novaPagina();
             continue;
         }
@@ -60,6 +57,7 @@ export function paginarBlocos(blocos, largura, altura, tamanhoFonte) {
 
         const espacoBloco = ehTitulo ? 12 : ESPACO_PARAGRAFO;
         let linhasRestantes = [...linhasBloco];
+        let continuacao = Boolean(bloco.continuacao);
 
         while (linhasRestantes.length > 0) {
             const espacoRestante = alturaUtil - alturaUsada;
@@ -78,24 +76,25 @@ export function paginarBlocos(blocos, largura, altura, tamanhoFonte) {
             );
 
             const linhasParte = linhasRestantes.splice(0, quantidade);
+            const continuaNaProximaPagina =
+                linhasRestantes.length > 0;
 
             blocosPagina.push({
                 titulo: ehTitulo,
-                texto: linhasParte.join(' '),
+                texto: linhasParte.join(" "),
+                continuacao,
+                continuaNaProximaPagina,
             });
 
             alturaUsada +=
                 quantidade * tamanhoBloco + espacoBloco;
 
-            // Se o bloco ainda não terminou, continua na próxima página.
-            if (linhasRestantes.length > 0) {
+            if (continuaNaProximaPagina) {
                 novaPagina();
+                continuacao = true;
             }
         }
 
-        // Só quebra depois que o bloco inteiro terminou.
-        // Assim, um parágrafo dividido por falta de espaço não provoca
-        // uma quebra extra antes de terminar.
         if (bloco.quebraApos) {
             novaPagina();
         }
