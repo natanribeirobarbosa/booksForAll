@@ -28,7 +28,10 @@ export function paginarBlocos(blocos, largura, altura, tamanhoFonte) {
         alturaUsada = 0;
     }
 
-    for (const bloco of blocos || []) {
+
+    const blocosAjustados = juntarBlocosContinuados(blocos);
+
+    for (const bloco of blocosAjustados) {
         const texto = String(bloco.texto || "").trim();
 
         if (!texto) {
@@ -108,4 +111,32 @@ export function paginarBlocos(blocos, largura, altura, tamanhoFonte) {
         numero: indice + 1,
         blocos: pagina.blocos,
     }));
+}
+
+
+function comecaComMinuscula(texto) {
+    return /^[a-záàâãéèêíìîóòôõúùûüç]/.test(
+        String(texto || '').trim()
+    );
+}
+
+function juntarBlocosContinuados(blocos) {
+    const resultado = [];
+
+    for (const bloco of blocos || []) {
+        const texto = String(bloco.texto || '').trim();
+
+        if (!texto) continue;
+
+        const anterior = resultado[resultado.length - 1];
+
+        if (anterior && comecaComMinuscula(texto) && !bloco.titulo) {
+            anterior.texto = `${anterior.texto.trimEnd()} ${texto}`;
+            anterior.quebraApos = bloco.quebraApos;
+        } else {
+            resultado.push({ ...bloco, texto });
+        }
+    }
+
+    return resultado;
 }
